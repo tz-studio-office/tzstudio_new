@@ -80,7 +80,7 @@ function Marquee() {
   );
 }
 
-function Header() {
+function Header({ onContactClick }: { onContactClick: () => void }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -129,14 +129,14 @@ function Header() {
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-black transition-all group-hover:w-full" />
             </motion.a>
           ))}
-          <motion.a 
-            href="#contact" 
+          <motion.button 
+            onClick={onContactClick}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="bg-black text-white px-10 py-4 rounded-full text-[11px] font-black uppercase tracking-[0.25em] shadow-2xl shadow-black/20"
           >
             Connect
-          </motion.a>
+          </motion.button>
         </nav>
 
         <button 
@@ -158,8 +158,14 @@ function Header() {
             {['Vision', 'Services', 'Lab', 'About', 'Contact'].map((item) => (
               <a 
                 key={item} 
-                href={`#${item.toLowerCase()}`} 
-                onClick={() => setIsMenuOpen(false)}
+                href={item === 'Contact' ? '#' : `#${item.toLowerCase()}`} 
+                onClick={(e) => {
+                  setIsMenuOpen(false);
+                  if (item === 'Contact') {
+                    e.preventDefault();
+                    onContactClick();
+                  }
+                }}
                 className="font-sans text-5xl font-black tracking-tight text-black hover:scale-110 transition-all"
               >
                 {item}
@@ -858,15 +864,17 @@ function Contact() {
     e.preventDefault();
     const name = (document.getElementById('name') as HTMLInputElement).value;
     const email = (document.getElementById('email') as HTMLInputElement).value;
+    const phone = (document.getElementById('phone') as HTMLInputElement).value;
     const message = (document.getElementById('message') as HTMLTextAreaElement).value;
     
     setStatus('submitting');
     
     try {
+      const fullMessage = phone ? `お問い合わせ内容:\n${message}\n\n電話番号: ${phone}` : message;
       const response = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, message })
+        body: JSON.stringify({ name, email, message: fullMessage })
       });
       
       if (response.ok) {
@@ -874,10 +882,9 @@ function Contact() {
       } else {
         let errorMessage = 'Failed to send message';
         try {
-          const errorData = await response.json();
+          const errorData: any = await response.json();
           errorMessage = errorData.message || errorData.details || errorMessage;
-        } catch (e) {
-          // If not JSON, get text
+        } catch (e: any) {
           const text = await response.text();
           errorMessage = text || errorMessage;
         }
@@ -915,6 +922,9 @@ function Contact() {
                   </div>
                   <div className="relative group">
                     <input type="email" required className="w-full bg-black/[0.02] border-b-2 border-black/10 p-8 text-2xl font-black text-black focus:outline-none focus:border-black transition-all placeholder:text-black/40 tracking-tight uppercase" id="email" placeholder="Email Address" />
+                  </div>
+                  <div className="relative group">
+                    <input type="tel" className="w-full bg-black/[0.02] border-b-2 border-black/10 p-8 text-2xl font-black text-black focus:outline-none focus:border-black transition-all placeholder:text-black/40 tracking-tight uppercase" id="phone" placeholder="Phone Number" />
                   </div>
                   <div className="relative group">
                     <textarea required rows={3} className="w-full bg-black/[0.02] border-b-2 border-black/10 p-8 text-2xl font-black text-black focus:outline-none focus:border-black transition-all placeholder:text-black/40 resize-none tracking-tight uppercase" id="message" placeholder="Your Message" />
@@ -989,7 +999,167 @@ function CustomCursor() {
   );
 }
 
+function ContactModal({ isOpen, onClose, serviceTitle }: { isOpen: boolean, onClose: () => void, serviceTitle?: string }) {
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
+  const isEducation = serviceTitle?.toLowerCase().includes('education');
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const data = Object.fromEntries(formData.entries());
+    
+    setStatus('submitting');
+    
+    try {
+      const subject = serviceTitle ? `【T'Z Studio】お問い合わせ: ${serviceTitle}` : "【T'Z Studio】お問い合わせ";
+      
+      // Construct message from all fields
+      let fullMessage = `お問い合わせ内容:\n${data.message}\n\n`;
+      if (data.phone) fullMessage += `電話番号: ${data.phone}\n`;
+      if (data.targetClass) fullMessage += `対象クラス: ${data.targetClass}\n`;
+
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name: data.name, 
+          email: data.email, 
+          message: fullMessage,
+          subject 
+        })
+      });
+      
+      if (response.ok) {
+        setStatus('success');
+        setTimeout(() => {
+          onClose();
+          setStatus('idle');
+        }, 2000);
+      } else {
+        let errorMessage = 'Failed to send message';
+        try {
+          const errorData: any = await response.json();
+          errorMessage = errorData.message || errorData.details || errorMessage;
+        } catch (e: any) {
+          const text = await response.text();
+          errorMessage = text || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+    } catch (error: any) {
+      console.error('Error sending message:', error);
+      alert(`送信に失敗しました: ${error.message}`);
+      setStatus('idle');
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[20000] flex items-center justify-center p-4 md:p-8"
+        >
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-black/90 backdrop-blur-xl" 
+          />
+          
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-2xl bg-white rounded-[3rem] overflow-hidden shadow-2xl p-8 md:p-16"
+          >
+            <button 
+              onClick={onClose}
+              className="absolute top-8 right-8 text-black/40 hover:text-black transition-colors"
+            >
+              <X size={24} />
+            </button>
+
+            <div className="space-y-12">
+              <div className="space-y-4">
+                <span className="text-[10px] font-black text-black/40 uppercase tracking-[0.4em]">Inquiry Form</span>
+                <h2 className="text-4xl font-black tracking-tight uppercase">
+                  {serviceTitle ? `${serviceTitle}` : 'Contact Us'}
+                </h2>
+                <p className="text-black/60 font-black uppercase tracking-tight">
+                  必要事項をご記入の上、送信してください。
+                </p>
+              </div>
+
+              {status === 'success' ? (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="py-12 text-center space-y-4">
+                  <div className="w-20 h-20 bg-black rounded-full flex items-center justify-center mx-auto mb-8">
+                    <ArrowUpRight size={40} className="text-white rotate-45" />
+                  </div>
+                  <p className="text-3xl font-black uppercase tracking-tight">Thank you.</p>
+                  <p className="text-black/60 font-black uppercase tracking-tight">メッセージを送信しました。担当者よりご連絡いたします。</p>
+                </motion.div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-black/40 uppercase tracking-widest ml-4">Name</label>
+                      <input name="name" type="text" required className="w-full bg-black/[0.02] border-b-2 border-black/10 p-4 font-black text-black focus:outline-none focus:border-black transition-all placeholder:text-black/20 uppercase tracking-tight" placeholder="氏名" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-black/40 uppercase tracking-widest ml-4">Email</label>
+                      <input name="email" type="email" required className="w-full bg-black/[0.02] border-b-2 border-black/10 p-4 font-black text-black focus:outline-none focus:border-black transition-all placeholder:text-black/20 uppercase tracking-tight" placeholder="メールアドレス" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-black/40 uppercase tracking-widest ml-4">Phone</label>
+                      <input name="phone" type="tel" required={isEducation} className="w-full bg-black/[0.02] border-b-2 border-black/10 p-4 font-black text-black focus:outline-none focus:border-black transition-all placeholder:text-black/20 uppercase tracking-tight" placeholder="電話番号" />
+                    </div>
+                    {isEducation && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-black/40 uppercase tracking-widest ml-4">Target Class</label>
+                        <select name="targetClass" required className="w-full bg-black/[0.02] border-b-2 border-black/10 p-4 font-black text-black focus:outline-none focus:border-black transition-all uppercase tracking-tight appearance-none cursor-pointer">
+                          <option value="">対象クラスを選択</option>
+                          <option value="大学受験対策">大学受験対策</option>
+                          <option value="英検対策">英検対策</option>
+                          <option value="TOEIC対策">TOEIC対策</option>
+                          <option value="社会人英語">社会人英語</option>
+                          <option value="その他">その他</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-black/40 uppercase tracking-widest ml-4">Message</label>
+                    <textarea name="message" required rows={4} className="w-full bg-black/[0.02] border-b-2 border-black/10 p-4 font-black text-black focus:outline-none focus:border-black transition-all placeholder:text-black/20 resize-none uppercase tracking-tight" placeholder="メッセージ（自由記入）" />
+                  </div>
+
+                  <button 
+                    disabled={status === 'submitting'}
+                    type="submit"
+                    className="w-full py-6 bg-black text-white rounded-full font-black uppercase tracking-[0.2em] hover:scale-[1.02] transition-transform flex items-center justify-center gap-4 text-lg shadow-2xl shadow-black/20 disabled:opacity-50"
+                  >
+                    {status === 'submitting' ? 'Sending...' : 'Send Inquiry'}
+                    <ArrowRight size={20} />
+                  </button>
+                </form>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function ServiceDetail({ service, onClose }: { service: any, onClose: () => void }) {
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   if (!service || !service.detail) return null;
   const d = service.detail;
 
@@ -1355,39 +1525,7 @@ function ServiceDetail({ service, onClose }: { service: any, onClose: () => void
                   {d.consultation.closing}
                 </p>
                 <button 
-                  onClick={async () => {
-                    const subject = `【T'Z Studio】お問い合わせ: ${d.title}`;
-                    try {
-                      const response = await fetch('/api/contact', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                          name: 'Service Detail Inquiry', 
-                          email: 'info@t-z-studio.com', 
-                          message: `Inquiry for ${d.title}`,
-                          subject 
-                        })
-                      });
-                      
-                      if (response.ok) {
-                        alert('お問い合わせを送信しました。');
-                        onClose();
-                      } else {
-                        let errorMessage = 'Failed to send inquiry';
-                        try {
-                          const errorData = await response.json();
-                          errorMessage = errorData.message || errorData.details || errorMessage;
-                        } catch (e) {
-                          const text = await response.text();
-                          errorMessage = text || errorMessage;
-                        }
-                        throw new Error(errorMessage);
-                      }
-                    } catch (error: any) {
-                      console.error('Error sending inquiry:', error);
-                      alert(`送信に失敗しました: ${error.message}`);
-                    }
-                  }}
+                  onClick={() => setIsContactModalOpen(true)}
                   className="w-full md:w-auto px-12 py-6 bg-black text-white rounded-full font-black uppercase tracking-[0.2em] hover:scale-[1.05] transition-transform flex items-center justify-center gap-4 text-lg"
                 >
                   {d.consultation.buttonLabel}
@@ -1397,6 +1535,12 @@ function ServiceDetail({ service, onClose }: { service: any, onClose: () => void
             </motion.div>
           )}
         </div>
+
+        <ContactModal 
+          isOpen={isContactModalOpen} 
+          onClose={() => setIsContactModalOpen(false)} 
+          serviceTitle={d.title}
+        />
       </div>
     </motion.div>
   );
@@ -1404,6 +1548,7 @@ function ServiceDetail({ service, onClose }: { service: any, onClose: () => void
 
 export default function App() {
   const [selectedService, setSelectedService] = useState<any>(null);
+  const [isGeneralContactOpen, setIsGeneralContactOpen] = useState(false);
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
     stiffness: 100,
@@ -1434,7 +1579,7 @@ export default function App() {
       />
       
       <div className="relative z-10">
-        <Header />
+        <Header onContactClick={() => setIsGeneralContactOpen(true)} />
         <Hero />
         <Vision />
         <Marquee />
@@ -1453,6 +1598,11 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      <ContactModal 
+        isOpen={isGeneralContactOpen} 
+        onClose={() => setIsGeneralContactOpen(false)} 
+      />
     </div>
   );
 }
