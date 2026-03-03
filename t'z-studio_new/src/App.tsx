@@ -958,7 +958,7 @@ function Footer() {
           <a href="#" className="text-xs font-black uppercase tracking-widest text-black/40 hover:text-black transition-colors">LinkedIn</a>
         </div>
         <div className="text-xs font-black text-black/20 uppercase tracking-widest">
-          © 2024 T'Z Studio.
+          © 2026 T'Z Studio.
         </div>
       </div>
     </footer>
